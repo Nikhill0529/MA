@@ -1,0 +1,87 @@
+Lab14-01.exe — URLMon Beacon with Custom Base64
+▶  TOOL: IDA Pro + OllyDbg
+🔧 Steps to perform:
+•	Open in IDA Pro → check imports → find urlmon.dll → URLDownloadToCacheFileA
+•	This library is used → HTTP traffic looks like normal browser traffic
+•	Find GetCurrentHWProfileA → extracts partial GUID (characters 19-24)
+•	Find GetUserNameA → gets current username
+•	Both combined to form a unique network beacon → changes per machine and per user
+•	Find Base64 encoding function → look at the padding character
+•	Standard Base64 uses "=" for padding → this malware uses "a" instead
+•	Open in OllyDbg → set breakpoint at 0x004013A2 → run → observe encoding
+•	Every 60 seconds: download file from C2 and execute it
+✅ Result: Network library: URLMon. Beacon = GUID + username in custom Base64 (padding = "a" not "=")
+
+
+Lab14-02.exe — WININET HTTP Covert Channel
+▶  TOOL: IDA Pro + OllyDbg
+🔧 Steps to perform:
+•	Open in IDA Pro → imports → WININET.dll (HttpSendRequest, InternetReadFile, etc.)
+•	C2 URL is stored in string resource (not hardcoded in code) → harder to detect
+•	Two threads created:
+•	  Thread 1: outgoing → encodes data in User-Agent field → custom Base64
+•	  Thread 2: incoming → reads commands from response
+•	Thread 2 user-agent hardcoded = "Internet Surf" → easy signature
+•	Open OllyDbg → set breakpoint at 0x00401750
+•	Run → when bp hits → see custom Base64 encoded data ready to send
+•	Decoded data = cmd.exe command prompt output
+•	Flaw: incoming commands are NOT encoded → visible in plain text in traffic
+✅ Result: WININET used; outgoing data in User-Agent (encoded), incoming commands in plain text
+
+
+Lab14-03.exe — HTML Comment Command Channel
+▶  TOOL: IDA Pro
+🔧 Steps to perform:
+•	Open in IDA Pro → check string for beacon destination URL
+•	Find: http://www.practicalmalwareanalsysis.com/start.htm (note typo in URL)
+•	But: if file C:\autobat.exe exists → its contents are used as URL instead
+•	Malware sends HTTP GET → searches response HTML for <noscript> tag
+•	URL must follow the <noscript> tag AND end with 69' to be valid command
+•	Available commands (only first character used):
+•	  d = download and execute a file
+•	  n = exit the malware
+•	  s = sleep
+•	  r = rewrite autobat.exe (change C2 server)
+•	Command arguments: encoded as pairs of characters → atoi → lookup table
+✅ Result: Commands hidden in HTML comments/noscript tags; custom encoding for arguments
+
+
+Lab15-01.exe — Anti-Disassembly (0xE8 Trick)
+▶  TOOL: IDA Pro
+🔧 Steps to perform:
+•	Open Lab15-01.exe in IDA Pro → code looks garbled/wrong → anti-disassembly
+•	Technique: XOR self with same value → result always = 0 → JZ always jumps
+•	Before the jump: a fake 0xE8 byte is inserted → IDA misinterprets following bytes as operand
+•	This confuses IDA into showing wrong instructions
+•	To fix: click on bad instruction → press U (undefine) → press C (reanalyze as code)
+•	Repeat for all 5 instances of this trick in the file
+•	After fixing: trace the argument comparison → find the password
+•	Password to print "Good Job!" = pdq
+✅ Result: Anti-disassembly: 0xE8 opcode trick used 5 times; fixed by undefine+reanalyze; password = pdq
+
+
+Lab15-02.exe — Anti-Disassembly + User-Agent Generation
+▶  TOOL: IDA Pro (fix anti-disassembly first)
+🔧 Steps to perform:
+•	Open in IDA Pro → fix all anti-disassembly tricks first (U then C on bad instructions)
+•	After fixing: find URL = http://www.practicalmalwareanalysis.com/bamboo.html
+•	Find User-Agent generation code: takes computer hostname → shifts each character by +1
+•	Special cases: Z wraps to A, z wraps to a, 9 wraps to 0
+•	Malware looks for string "Bamboo::" in the downloaded page
+•	Extracts the URL that follows "Bamboo::" → downloads that URL
+•	Saves downloaded content as "Account Summary.xls.exe"
+•	Executes via ShellExecuteA
+✅ Result: Initial URL: bamboo.html; looks for Bamboo:: tag; downloads+runs second payload
+
+
+Lab15-03.exe — SEH + Return Address Overwrite
+▶  TOOL: IDA Pro + OllyDbg
+🔧 Steps to perform:
+•	Open in IDA Pro → at start of program: see stack manipulation overwriting return address
+•	Return address on stack = overwritten with 0x40148c → malicious code starts here
+•	At 0x40148c: code sets up SEH handler via fs:0 → adds handler at 0x4014C0
+•	Then: intentional divide by zero → triggers SEH exception
+•	SEH handler at 0x4014C0: downloads a file from encoded URL → executes via WinExec
+•	URL encoding: each byte is negated (simple negation cipher)
+•	In OllyDbg: set bp at the write to return address → observe the overwrite
+✅ Result: Malicious code called via return address overwrite; SEH handler downloads and runs payload

@@ -1,0 +1,201 @@
+Lab01-01.exe and Lab01-01.dll
+▶  TOOL 1: VirusTotal.com
+🔧 Steps to perform:
+•	Open browser and go to www.virustotal.com
+•	Click "Choose File" and upload Lab01-01.exe
+•	Wait for scan results — note how many AV engines detected it (e.g., 44/73)
+•	Click "Details" tab → find Compilation Timestamp (date file was compiled)
+•	Repeat: upload Lab01-01.dll — note detection count and timestamp
+•	If both files have SAME compile timestamp → they are related/associated
+✅ Result: Both files compiled around 2010-12-19 16:16:19 — they are related malware
+
+▶  TOOL 2: PEiD
+🔧 Steps to perform:
+•	Open PEiD application
+•	Drag and drop Lab01-01.exe onto PEiD window
+•	Read the result line — shows compiler or packer name
+•	If it shows "Microsoft Visual C++ 6.0" → file is NOT packed
+•	If it shows "UPX" or "FSG" → file IS packed
+•	Click "EP Section" button → check section names (UPX0/UPX1 = UPX packed)
+•	Repeat for Lab01-01.dll
+✅ Result: Both files show Microsoft Visual C++ 6.0 → NOT packed → easy to analyze
+
+▶  TOOL 3: PE Explorer
+🔧 Steps to perform:
+•	Open PE Explorer → File → Open → select Lab01-01.exe
+•	Click "Import Viewer" on left panel → expand each DLL listed
+•	KERNEL32.dll → look for: FindFirstFileA, FindNextFileA (searches filesystem)
+•	WS2_32.dll (in .dll file) → indicates network functionality
+•	Click "Disassembler" → scroll through strings section
+•	Look for: kerne132.dll (note: number 1, not letter l) → disguised as kernel32.dll
+•	In Lab01-01.dll → find IP address: 127.26.152.13 → network-based indicator
+✅ Result: Lab01-01.exe searches filesystem; Lab01-01.dll has network backdoor capability
+
+Lab01-02.exe — UPX Packed File
+▶  TOOL 1: PEiD (Detect Packer)
+🔧 Steps to perform:
+•	Open PEiD → drag Lab01-02.exe onto it
+•	First try: Normal scan → shows "Nothing found *"
+•	Change scan mode to "Deep Scan" (dropdown next to scan button)
+•	Result now shows: UPX packer detected
+•	Click "EP Section" → shows sections named UPX0, UPX1, UPX2
+•	UPX0 has Virtual Size = 0x4000 but Raw Size = 0 → reserved for unpacked code
+✅ Result: File is UPX packed — must unpack to analyze properly
+
+
+▶  TOOL 2: PE Explorer (Unpack UPX)
+🔧 Steps to perform:
+•	Open PE Explorer → Plugins menu → enable "UPX Unpacker Plug-in"
+•	Now open/reload Lab01-02.exe → it auto-unpacks on load
+•	Go to Import Viewer → now see 4 DLLs with real imports:
+•	  KERNEL32.DLL → CreateThread (process creation)
+•	  ADVAPI32.dll → CreateServiceA (installs as service)
+•	  WININET.dll → InternetOpenA + InternetOpenUrlA (connects to URL)
+•	Go to Disassembler → find strings: "Malservice", "http://www.malwareanalysisbook.com", "Internet Explorer 8.0"
+✅ Result: Malware creates a service called "Malservice" and connects to a URL
+
+
+Lab01-03.exe — FSG Packed (Hard to Unpack)
+▶  TOOL 1: PEiD
+🔧 Steps to perform:
+•	Open PEiD → drag Lab01-03.exe
+•	Result: shows "FSG 1.0" → harder packer, cannot auto-unpack
+•	EP Section → blank section names + first section: virtual size > 0, raw size = 0
+📌 NOTE: FSG packed files cannot be easily unpacked — need OllyDbg for manual unpacking
+
+▶  TOOL 2: Dependency Walker
+🔧 Steps to perform:
+•	Open Dependency Walker → File → Open → select Lab01-03.exe
+•	Expand KERNEL32.DLL in the tree
+•	Only imports visible: LoadLibraryA and GetProcAddress
+•	These two functions are typical wrapper functions for packed files
+•	Cannot determine real functionality — file is packed
+✅ Result: File is packed with FSG 1.0; visible imports are only packer stubs; real imports hidden
+
+
+Lab01-04.exe — Fake Compile Time + Embedded Resource
+▶  TOOL 1: PE Explorer
+🔧 Steps to perform:
+•	Open PE Explorer → File → Open → Lab01-04.exe
+•	Check Date Time Stamp → it shows a future date → FAKED compile time
+•	Go to Import Viewer → three DLLs imported:
+•	  KERNEL32.dll: SizeOfResource, FindResource, LoadResource → reads own resource section
+•	  KERNEL32.dll: CreateFile, WriteFile, WinExec → drops and runs a file
+•	  ADVAPI32.dll: LookupPrivilegeValueA, AdjustTokenPrivileges → elevates privileges
+•	Go to Disassembler → find strings: \system32\wupdmgr.exe, \winup.exe, psapi.dll
+✅ Result: Malware drops a file disguised as Windows Update Manager (wupdmgr.exe)
+
+
+▶  TOOL 2: Resource Hacker
+🔧 Steps to perform:
+•	Open Resource Hacker → File → Open → select Lab01-04.exe
+•	Expand the resource tree on the left panel
+•	Find "BINARY" resource → click on it to view contents
+•	The resource contains an embedded executable (another .exe file inside)
+•	Action menu → Save Resource to BIN file → save to extract it
+✅ Result: Embedded executable found in resource section — malware drops this file during execution
+
+Lab03-01.exe — Basic Dynamic Analysis
+📌 NOTE: SETUP FIRST: Take VM snapshot → Set network to Host-only → Configure ApateDNS to redirect DNS to 127.0.0.1 → Start iNetSim → Open Netcat listeners on port 80 and 443
+▶  TOOL 1: Procmon (Process Monitor)
+🔧 Steps to perform:
+•	Open Procmon → press Ctrl+X to clear all existing events
+•	Add filter: Process Name → is → Lab03-01.exe → Include
+•	Add filter: Operation → is → WriteFile → Include
+•	Add filter: Operation → is → RegSetValue → Include
+•	Run Lab03-01.exe
+•	In Procmon, observe: WriteFile to C:\WINDOWS\system32\vmx32to64.exe
+•	Observe: RegSetValue at HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\VideoDriver
+✅ Result: Malware copies itself as vmx32to64.exe and sets registry key for startup persistence
+
+
+▶  TOOL 2: Process Explorer
+🔧 Steps to perform:
+•	Open Process Explorer before running the malware
+•	Run Lab03-01.exe → find it in the process list
+•	Right-click on process → Properties → Handles tab
+•	Look for Mutex named: WinVMX32 → this prevents multiple infections of same machine
+•	Go to DLLs tab → see ws2_32.dll and wshtcpip.dll → confirms network capability
+✅ Result: Host-based indicators: Mutex WinVMX32, file vmx32to64.exe, registry VideoDriver key
+
+
+▶  TOOL 3: ApateDNS
+🔧 Steps to perform:
+•	Open ApateDNS → set "Reply IP" to 127.0.0.1
+•	Click "Start DNS Server" button
+•	Run the malware → watch DNS requests column
+•	Observe: periodic DNS requests to www.practicalmalwareanalysis.com every ~30 seconds
+✅ Result: Network-based indicator: malware beacons DNS to www.practicalmalwareanalysis.com every 30s
+
+
+▶  TOOL 4: Netcat Listener
+🔧 Steps to perform:
+•	Open Command Prompt 1 → type: nc -lvp 80
+•	Open Command Prompt 2 → type: nc -lvp 443
+•	Run malware (with ApateDNS redirecting to 127.0.0.1)
+•	Netcat on port 443 receives data → shows encrypted/random characters (SSL beacon)
+✅ Result: Malware transmits data on port 443 — network-based signature identified
+
+
+Lab03-02.dll — Dynamic Analysis of DLL
+📌 NOTE: DLLs cannot be run directly — use rundll32.exe. First find the exported function names.
+▶  TOOL 1: PE Explorer (Find Exports)
+🔧 Steps to perform:
+•	Open PE Explorer → File → Open → Lab03-02.dll
+•	Click "Export Viewer" → note exported function names: Install, installA
+•	Check Import Viewer → note: ADVAPI32.dll present → service functionality
+✅ Result: Export functions found: Install and installA — use these with rundll32
+
+▶  TOOL 2: Regshot (Registry Snapshot)
+🔧 Steps to perform:
+•	Open Regshot → click "1st shot" → take snapshot BEFORE running malware
+•	Run: rundll32.exe Lab03-02.dll,install
+•	Click "2nd shot" in Regshot → take snapshot AFTER running
+•	Click "Compare" → see all registry changes
+•	Key result: IPRIP service added with registry keys including DisplayName and ImagePath
+•	ImagePath = %SystemRoot%\System32\svchost.exe -k netsvcs
+✅ Result: IPRIP service installed — malware runs as svchost.exe with network services
+
+
+▶  TOOL 3: Services.msc / net start
+🔧 Steps to perform:
+•	Open Command Prompt → type: net start IPRIP
+•	Or: open Services.msc → find "Intranet Network Awareness (INA+)" → Start
+•	Open Process Explorer → View → Find Handle or DLL
+•	Search for: Lab03-02.dll → find the svchost.exe instance that loaded it
+•	Note the PID of that svchost → use in Procmon filter
+✅ Result: Malware is running inside svchost.exe — found via Process Explorer DLL search
+
+
+▶  TOOL 4: Wireshark
+🔧 Steps to perform:
+•	Start Wireshark → select network adapter → click Start Capture
+•	Start iNetSim on REMnux (set as DNS server)
+•	Install and start the IPRIP service (as above)
+•	In Wireshark filter bar → type: dns → observe DNS requests
+•	See: DNS queries for practicalmalwareanalysis.com
+•	Change filter to: http → see HTTP GET request to /serve.html
+•	Right-click on HTTP packet → Follow → TCP Stream → see full HTTP request
+✅ Result: Network indicators: DNS to practicalmalwareanalysis.com, HTTP GET to /serve.html
+
+
+Lab03-03.exe — Process Replacement Keylogger
+▶  TOOL 1: Process Explorer
+🔧 Steps to perform:
+•	Open Process Explorer → run Lab03-03.exe
+•	Watch: Lab03-03.exe briefly appears → spawns svchost.exe → then disappears
+•	A svchost.exe appears with no parent listed → this is ORPHANED (suspicious!)
+•	Click on the orphaned svchost.exe → Properties
+•	Go to "Strings" tab → click "Memory" radio button
+•	See strings like: practicalmalware.log + keyboard key names
+•	Compare with "Image" strings — memory has extra strings = process replacement
+✅ Result: Lab03-03.exe performs process replacement on svchost.exe and is a keylogger
+
+
+▶  TOOL 2: Procmon
+🔧 Steps to perform:
+•	In Procmon → add filter: PID → is → [PID of orphaned svchost]
+•	Type some text on keyboard
+•	In Procmon → see repeated WriteFile operations to practicalmalwareanalysis.log
+•	Open the file practicalmalwareanalysis.log → it contains your typed keystrokes
+✅ Result: Keylogger confirmed — saves keystrokes to C:\practicalmalwareanalysis.log

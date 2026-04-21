@@ -1,0 +1,59 @@
+Lab07-01.exe — Service Persistence + Mutex + DDoS
+▶  TOOL: IDA Pro
+🔧 Steps to perform:
+•	Open Lab07-01.exe in IDA Pro → check Import Viewer first
+•	Find: OpenSCManagerA, CreateServiceA → malware installs itself as a service
+•	Find: OpenMutexA / CreateMutexA → prevents re-infection of same machine
+•	Navigate to CreateServiceA call → note service name: "Malservice" (auto-start)
+•	Navigate to OpenMutexA → note mutex name: "HGL345"
+•	Find URL string: http://www.malwareanalysisbook.com → User-Agent: Internet Explorer 8.0
+•	Find CreateThread called 20 times → each thread connects to URL in infinite loop
+•	Find Sleep call → value is very large (until year ~2100)
+✅ Result: Persistence: Malservice auto-start. Mutex: HGL345. Purpose: DDoS attack the URL forever
+
+Lab09-01.exe — OllyDbg Patching
+▶  TOOL 1: IDA Pro (find password and install command)
+🔧 Steps to perform:
+•	Open in IDA Pro → find sub_00402510 → inside see string comparison with "abcd"
+•	This is the password check → password = abcd
+•	Main function checks command-line argument for: -in, -re, -cc, -c
+•	-in = install, -re = remove, -cc = print registry config, -c = set config
+•	To run: Lab09-01.exe -in abcd (installs malware as service)
+▶  TOOL 2: OllyDbg (Patch to bypass password)
+🔧 Steps to perform:
+•	Open OllyDbg → File → Open → select Lab09-01.exe
+•	Press Ctrl+G → type address: 0x00402B38 → press OK
+•	See the JNZ instruction at that address
+•	Right-click on the instruction → select "Edit binary" (or press Ctrl+E)
+•	The current hex value is 75 (JNZ opcode) → change it to 74 (JZ opcode)
+•	Click OK to apply
+•	Right-click in disassembly window → Copy to executable → All modifications
+•	In the new window → File → Save → give it a name (e.g., Lab09-01-patched.exe)
+✅ Result: Patched exe no longer requires password — JNZ changed to JZ bypasses check
+
+Lab09-02.exe — XOR Encoded Domain Name
+▶  TOOL: OllyDbg
+🔧 Steps to perform:
+•	Run Lab09-02.exe normally → it immediately exits (nothing happens)
+•	Open in OllyDbg → press F9 to run → observe where it stops
+•	Find GetModuleFileNameA call → malware checks its OWN filename
+•	Malware compares filename to "ocl.exe" → if no match, exits
+•	RENAME the file to ocl.exe → then run in OllyDbg again
+•	Press Ctrl+G → 0x00401133 → see string being built character by character
+•	The string formed = "1qaz2wsx3edc" → this is the XOR key
+•	Step into subroutine 0x00401089 → this XOR-decodes the domain name
+•	Decoded domain = www.practicalmalwareanalysis.com
+•	At 0x0040106E → CreateProcessA for cmd.exe with socket as stdin/stdout = reverse shell
+✅ Result: Malware must be named ocl.exe; uses XOR key 1qaz2wsx3edc to encode domain; creates reverse shell
+
+Lab09-03.exe — DLL Base Address / Manual Load in IDA
+▶  TOOL: OllyDbg + IDA Pro
+🔧 Steps to perform:
+•	Open Lab09-03.exe in IDA Pro → View → Imports → see DLL1.dll, DLL2.dll + NETAPI32
+•	Open each DLL separately in IDA → check Image Base: all three request 0x10000000
+•	Open Lab09-03.exe in OllyDbg → run it
+•	View → Executable Modules → check actual load addresses:
+•	  DLL1.dll = 0x10000000, DLL2.dll = 0x330000, DLL3.dll = 0x390000 (rebased!)
+•	To match OllyDbg addresses in IDA for DLL2: File → Open DLL2.dll → tick "Manual Load"
+•	Enter base address: 0x330000 → now addresses match OllyDbg
+✅ Result: Three DLLs all request same base address; OS rebases 2 of them; use Manual Load in IDA to match

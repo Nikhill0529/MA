@@ -1,0 +1,113 @@
+Lab05-01.dll — IDA Pro Navigation & Analysis
+▶  TOOL: IDA Pro
+🔧 How to open and load:
+•	Open IDA Pro → File → Open → select Lab05-01.dll
+•	Accept all default settings → wait for auto-analysis to complete
+•	The analysis is done when the progress bar disappears
+
+🔧 Finding DllMain address:
+•	Open Functions window: View → Open Subviews → Functions
+•	Scroll or search for "DllMain" in the list
+•	The address shown = 0x1000D02E
+✅ Result: DllMain is located at address 0x1000D02E
+
+
+🔧 Finding import gethostbyname:
+•	View → Open Subviews → Imports (opens Imports window)
+•	Scroll to find "gethostbyname" in the list
+•	Double-click it → IDA jumps to address 0x100163CC in .idata section
+•	Press Ctrl+X on it → shows all cross-references (18 total, 5 unique callers)
+✅ Result: gethostbyname is at 0x100163CC; 5 functions call it
+
+🔧 Finding DNS request at 0x10001757:
+•	Press G → type 0x10001757 → press OK
+•	See: call to gethostbyname; parameter comes from off_10019040 → eax
+•	Double-click off_10019040 → it points to string: [This is RDO]pics.practicalmalwareanalysis.com
+•	Note: 0Dh (= 13 decimal) is added to eax → pointer moves 13 chars forward
+•	Skips "[This is RDO]" prefix → actual DNS request = pics.practicalmalwareanalysis.com
+✅ Result: DNS request made for: pics.practicalmalwareanalysis.com
+
+🔧 Counting local variables & parameters at 0x10001656:
+•	Press G → type 0x10001656
+•	At the top of the function, see var_ entries (negative offsets) = local variables
+•	Count them: 23 local variables
+•	See arg_ entries (positive offsets) = parameters
+•	Count them: 1 parameter (lpThreadParameter or arg_0)
+✅ Result: 23 local variables and 1 parameter in subroutine 0x10001656
+
+🔧 Finding \cmd.exe /c string:
+•	Press Alt+T → type \cmd.exe /c → click OK
+•	IDA finds the string at offset 0x100101D0 inside sub_1000FF58
+✅ Result: String \cmd.exe /c is at 0x100101D0 — used to open command prompt
+
+🔧 Finding Sleep duration at 0x10001358:
+•	Press G → type 0x10001358
+•	See: imul instruction → multiplies eax by 1000 (3E8h)
+•	Look up to find: aThisIsCti30 moved into eax, then offset +13 applied
+•	The value extracted = 30 → 30 × 1000ms = 30,000ms
+✅ Result: Program sleeps for 30 seconds at this code point
+
+🔧 Finding socket parameters at 0x10001701:
+•	Press G → type 0x10001701
+•	See three PUSH instructions before the call to socket: values 6, 1, 2
+•	Press R on each value to convert → symbolic names: IPPROTO_TCP, SOCK_STREAM, AF_INET
+•	Right-click each → "Use standard symbolic constant" to rename
+✅ Result: Socket type = TCP over IPv4 (IPPROTO_TCP, SOCK_STREAM, AF_INET)
+
+🔧 Finding VMware detection:
+•	Press Alt+B → type ED in hex field → search
+•	Find the "in" instruction (opcode 0xED) in sub_10006196
+•	Near it: see the value VMXh → this is VMware magic number
+•	Press Ctrl+X on sub_10006196 → see 3 cross-references
+•	Each reference shows "aFoundVirtualMa" string → malware exits if VM is detected
+✅ Result: Malware uses sidt/in instruction with VMXh to detect VMware and exits if found
+
+🔧 Decoding data at 0x1001D988:
+•	Press G → type 0x1001D988
+•	Press A → converts bytes to ASCII string (still looks garbled/encoded)
+•	Script lab05-01.py performs XOR with 0x55 on 0x50 bytes from cursor
+•	If IDA Python available: run the provided script
+•	Manual method: take each byte value → XOR with 0x55 → get ASCII character
+✅ Result: Data at 0x1001D988 is XOR encoded with key 0x55; decoded reveals a readable string
+
+Lab06-01 to Lab06-04.exe — Code Constructs
+▶  Lab06-01.exe: IF Statement
+🔧 Steps to perform:
+•	Open Lab06-01.exe in IDA Pro → auto-analysis completes
+•	If main not auto-found: look for sub_401040 (has argc/argv parameters)
+•	Double-click the first subroutine called from main (sub_401000)
+•	Inside: see call to InternetGetConnectedState → then CMP with 0 → JZ instruction
+•	JZ jumps if Zero (no internet) → goes to "Error 1.1: No Internet" string
+•	If no jump (has internet) → goes to "Success: Internet Connection" string
+•	0x40105F = printf function (identified by \n in strings passed to it)
+✅ Result: Code construct = IF Statement; purpose = test internet connection and print result
+
+▶  Lab06-02.exe: Download + Read File
+🔧 Steps to perform:
+•	Open Lab06-02.exe in IDA → find main = sub_401130
+•	2nd subroutine = sub_401040 → called only IF internet connection exists
+•	Inside sub_401040: see InternetOpenA with User-Agent "Internet Explorer 7.5/pma"
+•	See InternetOpenUrlA → URL = http://www.practicalmalwareanalysis.com/cc.htm
+•	Reads 512 bytes (200h) → compares first 4 bytes to <!-- (HTML comment)
+•	Code construct = multiple IF conditions comparing byte-by-byte
+✅ Result: Malware downloads cc.htm and reads a command from inside an HTML comment
+
+▶  Lab06-03.exe: Switch Statement
+🔧 Steps to perform:
+•	Open Lab06-03.exe in IDA → find the new subroutine: sub_401130
+•	Look at IDA comments in the code → it says "switch 5 cases"
+•	Press Space to switch to Graph view → see 5 branches + 1 default
+•	Each case does: (0) create dir C:\Temp, (1) copy file to C:\Temp\cc.exe
+•	(2) set Run registry key for persistence, (3) delete file, (4) sleep 100s
+✅ Result: Code construct = SWITCH STATEMENT with 5 cases; malware can create/delete/persist
+
+▶  Lab06-04.exe: For Loop (runs 24 hours)
+🔧 Steps to perform:
+•	Open Lab06-04.exe in IDA → find main → press Space for Graph view
+•	Identify FOR LOOP structure: initialization + comparison + body + increment
+•	var_C starts at 0 → increments by 1 each loop → stops at 1440
+•	Each loop: executes commands from cc.htm + Sleep for 60,000ms (60 seconds)
+•	Calculate runtime: 1440 loops × 60 seconds = 86400 seconds = 24 HOURS
+•	User-Agent: "Internet Explorer 7.50/pma%d" → %d = loop counter (increments each time)
+✅ Result: Code construct = FOR LOOP; malware runs for 24 hours, contacting C2 every 60 seconds
+ 

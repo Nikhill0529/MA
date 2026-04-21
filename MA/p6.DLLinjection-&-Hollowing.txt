@@ -1,0 +1,61 @@
+Lab12-01.exe + Lab12-01.dll — DLL Injection into Explorer.exe
+▶  TOOL 1: IDA Pro
+🔧 Steps to perform:
+•	Open Lab12-01.exe in IDA → check Import Viewer
+•	Find: CreateRemoteThread → indicates DLL injection
+•	Find string "explorer.exe" → press Ctrl+X → trace to injection code
+•	Code flow: EnumProcesses → loop → find explorer.exe → VirtualAllocEx (allocate memory in explorer)
+•	VirtualAllocEx allocates space for DLL path in explorer.exe memory
+•	WriteProcessMemory → writes DLL path into that allocated space
+•	CreateRemoteThread with LoadLibraryA as start → explorer.exe loads the DLL
+•	Open Lab12-01.dll in IDA → DllMain creates a thread
+•	Thread: infinite loop → MessageBox with title "Practical Malware Analysis %d"
+•	MessageBox appears every 60 seconds with incrementing counter
+✅ Result: DLL injected into explorer.exe; causes repeated pop-up message boxes
+
+
+▶  TOOL 2: Process Explorer
+🔧 Steps to perform:
+•	Open Process Explorer → run both files together (in same directory)
+•	Click on explorer.exe process in the list
+•	View → Lower Pane View → DLLs
+•	Scroll through DLLs list → find Lab12-01.dll → injection confirmed
+•	To stop pop-ups: kill explorer.exe in Process Explorer → then restart it
+✅ Result: DLL injection into explorer.exe confirmed via Process Explorer DLL view
+
+
+Lab12-02.exe — Process Hollowing (svchost.exe Keylogger)
+▶  TOOL 1: IDA Pro
+🔧 Steps to perform:
+•	Open Lab12-02.exe in IDA → find subroutine 0x004010EA
+•	Inside: CreateProcess with svchost.exe + CREATE_SUSPENDED flag → creates suspended process
+•	NtUnmapViewOfSection → unmaps original svchost code from memory
+•	VirtualAllocEx → allocates space in the now-empty process
+•	WriteProcessMemory → writes payload into the hollowed process
+•	ResumeThread → restores process execution with new (malicious) code
+•	This technique = PROCESS HOLLOWING
+•	Payload is stored in resource section (visible as many "A" characters)
+•	Resource is XOR decoded with key "A" (0x41) → real payload revealed
+✅ Result: Process hollowing: svchost.exe appears legitimate but runs malicious keylogger payload
+
+
+▶  TOOL 2: Procmon + Process Explorer
+🔧 Steps to perform:
+•	Run Lab12-02.exe → see svchost.exe created in process list
+•	In Process Explorer → click on the new svchost.exe → check strings
+•	In Procmon → filter on PID of new svchost → see WriteFile to practicalmalwareanalysis.log
+•	Type some keystrokes → open the log file → see your keystrokes inside
+✅ Result: Keylogger confirmed; saves to practicalmalwareanalysis.log; process appears as svchost.exe
+
+Lab12-04.exe — Winlogon Injection + SFC Bypass
+▶  TOOL: IDA Pro
+🔧 Steps to perform:
+•	Open Lab12-04.exe in IDA → find subroutine at 0x401000
+•	sub_401000: loops through running processes → returns 1 if process = winlogon.exe
+•	sub_00401174: injects into the found winlogon.exe process via CreateRemoteThread
+•	Find: LoadLibraryA with "sfc_os.dll" → loads System File Checker DLL
+•	GetProcAddress(sfc_os.dll, 2) → ordinal 2 = SfcTerminateWatcherThread()
+•	4th argument to CreateRemoteThread = SfcTerminateWatcherThread → disables Windows File Protection
+•	After SFC disabled: backs up C:\WINDOWS\system32\wupdmgr.exe to Temp\winup.exe
+•	Drops malicious replacement wupdmgr.exe from own resource section
+✅ Result: Injected into Winlogon to disable SFC then replace wupdmgr.exe with malicious payload

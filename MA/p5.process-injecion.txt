@@ -1,0 +1,75 @@
+Lab11-01.exe — GINA DLL Credential Theft
+▶  TOOL 1: Resource Hacker
+🔧 Steps to perform:
+•	Open Resource Hacker → File → Open → Lab11-01.exe
+•	Expand resource tree → find BINARY resource → this contains an embedded DLL
+✅ Result: Lab11-01.exe has an embedded DLL (msgina32.dll) in its resource section
+
+▶  TOOL 2: Procmon
+🔧 Steps to perform:
+•	Open Procmon → filter: Process Name = Lab11-01.exe
+•	Run the malware
+•	See: WriteFile creating msgina32.dll and software.LOG
+•	See: RegSetValue at HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\GinaDLL
+•	Value = msgina32.dll → custom GINA DLL registered with Windows logon
+✅ Result: Malware drops msgina32.dll and registers it as GINA DLL to intercept logins
+
+▶  TOOL 3: IDA Pro (analyze dropped msgina32.dll)
+🔧 Steps to perform:
+•	Open the dropped/extracted msgina32.dll in IDA Pro
+•	View → Open Subviews → Exports → check all exported functions
+•	All exports except WlxLoggedOutSAS just call original function → pass-through
+•	WlxLoggedOutSAS: receives login credentials → passes to original function AND to WriteFile
+•	WriteFile writes credentials to software.LOG
+✅ Result: GINA DLL steals login credentials by intercepting WlxLoggedOutSAS and writing to a log file
+
+
+Lab11-02.dll — AppInit_DLLs + Inline Hook
+📌 NOTE: Place Lab11-02.ini in C:\Windows\System32\ BEFORE installing the DLL
+▶  TOOL 1: Regshot + rundll32
+🔧 Steps to perform:
+•	Take Regshot 1st snapshot
+•	Copy Lab11-02.ini to C:\Windows\System32\
+•	Run: rundll32.exe Lab11-02.dll,installA
+•	Take Regshot 2nd snapshot → Compare
+•	See: HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\AppInit_DLLs = spoolvxx32.dll
+•	See: DLL copied to C:\Windows\System32\spoolvxx32.dll
+✅ Result: Malware installs via AppInit_DLLs — loads into every user-mode process on startup
+
+▶  TOOL 2: IDA Pro (analyze hook)
+🔧 Steps to perform:
+•	Open Lab11-02.dll in IDA Pro
+•	Find sub_100012A3 → gets address of send() from wsock32.dll
+•	Find sub_10001203 → inline hook function:
+•	  VirtualProtect → make 5 bytes writable at send() start
+•	  Write JMP instruction to redirect send() to hook function
+•	  Restore original memory protection
+•	Hook only targets: THEBAT.EXE, OUTLOOK.EXE, MSIMM.EXE (email clients)
+•	Hook intercepts outgoing email traffic (send function)
+•	Config from Lab11-02.ini is XOR decoded (key found in sub_100016CA)
+✅ Result: Rootkit technique: inline hook on wsock32.dll send() to capture email traffic from specific apps
+
+
+Lab11-03.exe + Lab11-03.dll — cisvc.exe Infection + Keylogger
+▶  TOOL 1: IDA Pro
+🔧 Steps to perform:
+•	Open Lab11-03.exe in IDA Pro → see main function clearly
+•	Step 1: Copies Lab11-03.dll to C:\Windows\System32\inet_epar32.dll
+•	Step 2: Modifies C:\Windows\System32\cisvc.exe (content indexing service)
+•	Inserts shellcode into cisvc.exe and changes its entry point
+•	Step 3: Runs: net start cisvc → starts the infected service
+•	Infected cisvc loads inet_epar32.dll via LoadLibrary → starts keylogger
+•	Open Lab11-03.dll in IDA → see export: zzz69806582 → creates a thread
+•	Thread: checks mutex MZ → creates file C:\Windows\System32\kernel64x.dll
+•	Imports: GetAsyncKeyState + GetForegroundWindow = keylogger code
+•	Keystrokes saved to kernel64x.dll
+✅ Result: cisvc.exe is infected as persistence mechanism; Lab11-03.dll is the keylogger payload
+
+▶  TOOL 2: Procmon
+🔧 Steps to perform:
+•	Open Procmon → filter: Process Name = Lab11-03.exe
+•	Run the malware → observe file creation events
+•	See: inet_epar32.dll written to System32
+•	See: cisvc.exe being modified (WriteFile on it)
+•	After net start cisvc: see kernel64x.dll being written repeatedly (keylog file)
+✅ Result: File-based indicators: inet_epar32.dll, infected cisvc.exe, kernel64x.dll keylog file

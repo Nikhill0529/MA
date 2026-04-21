@@ -1,0 +1,58 @@
+Lab13-01.exe — XOR Encoding + Base64
+▶  TOOL 1: IDA Pro (find XOR encoding)
+🔧 Steps to perform:
+•	Open Lab13-01.exe in IDA Pro
+•	Search → Text → type: xor → click Find All
+•	Navigate to sub_00401300 → see: FindResourceA with resource 101
+•	After loading resource → XOR loop with key ";" (semicolon)
+•	The XOR-decoded result = http://www.practicalmalwareanalysis.com
+✅ Result: XOR key = ";" (semicolon); encodes the C2 URL
+
+▶  TOOL 2: KANAL Plugin (in PEiD)
+🔧 Steps to perform:
+•	Open PEiD → load Lab13-01.exe
+•	Click Plugins → KANAL (Krypto ANALyzer)
+•	KANAL finds 4 addresses containing the Base64 alphabet string
+•	These are locations of the Base64 encoding function (at 0x004010B1)
+•	What gets Base64 encoded: computer name (maximum 12 bytes)
+•	Malware sends encoded computer name to C2 every 30 seconds
+•	Stops when C2 responds with first character = 0x6F
+✅ Result: Base64 is used to encode computer name in the network beacon
+
+
+Lab13-02.exe — Desktop Screenshot Encoder
+▶  TOOL 1: Procmon (dynamic analysis)
+🔧 Steps to perform:
+•	Open Procmon → filter: Process Name = Lab13-02.exe
+•	Run the malware
+•	See: files being created named temp[8 hex characters] every few seconds
+•	File size ~6,214 KB → large files being written
+✅ Result: Malware creates encrypted files named temp[8hexchars] in same folder as exe
+
+
+▶  TOOL 2: IDA Pro (trace encoding to source)
+🔧 Steps to perform:
+•	Open Lab13-02.exe in IDA → check Imports → find WriteFile
+•	Press Ctrl+X on WriteFile → cross-reference → trace back through call chain
+•	Find encoding function at 0x0040181F → calls sub_00401739 (XOR + bit shifts)
+•	Trace back further to sub_00401070 → find:
+•	  GetDesktopWindow → get handle to desktop
+•	  GetDC, CreateCompatibleDC, CreateCompatibleBitmap → create compatible drawing surface
+•	  BitBlt → copy pixels from screen to bitmap
+•	This sequence = TAKING A SCREENSHOT of the desktop
+✅ Result: Content being encoded = encrypted screenshots of the desktop taken periodically
+
+
+Lab13-03.exe — Custom Base64 + AES Encryption
+▶  TOOL 1: PEiD + FindCrypt2 + KANAL
+🔧 Steps to perform:
+•	Open PEiD → load Lab13-03.exe → Plugins → KANAL → runs analysis
+•	KANAL finds AES-related tables/constants → confirms AES encryption used
+•	Load file in IDA Pro → Plugins → FindCrypt2 → confirms AES (Rijndael)
+•	Navigate to address 0x4120A4 → see 65-character string
+•	This is the CUSTOM Base64 alphabet:
+•	  CDEFGHIJKLMNOPQRSTUVWXYZABcdefghijklmnopqrstuvwxyzab0123456789+/
+•	(Standard Base64 starts with ABC... — this one starts with CDE... = custom)
+•	AES initialization at 0x00401AC2 → 2nd argument = AES key
+•	Key = "ijklmnopqrstuvwx"
+✅ Result: Two techniques: Custom Base64 (alphabet starting CDE...) + AES with key ijklmnopqrstuvwx

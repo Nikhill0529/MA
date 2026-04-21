@@ -1,0 +1,56 @@
+Lab10-01.exe + Lab10-01.sys — Kernel Driver Disables Firewall
+📌 NOTE: Place Lab10-01.sys in C:\Windows\System32\ BEFORE running the exe
+▶  TOOL 1: Procmon
+🔧 Steps to perform:
+•	Open Procmon → clear events → filter on Process Name = Lab10-01.exe
+•	Run Lab10-01.exe
+•	Observe: Lab10-01.exe makes very few direct registry changes (only RNG\Seed)
+•	The real changes are done by the driver through services.exe (kernel level)
+✅ Result: Direct changes are minimal; the driver does the real work in kernel mode
+
+
+▶  TOOL 2: Regshot
+🔧 Steps to perform:
+•	Open Regshot → click "1st shot" → wait for snapshot to complete
+•	Run Lab10-01.exe
+•	Click "2nd shot" in Regshot
+•	Click "Compare" → look at registry keys added
+•	See: HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile
+•	See: HKLM\SOFTWARE\Policies\Microsoft\WindowsFirewall\StandardProfile
+•	These keys with EnableFirewall = 0 → Windows Firewall disabled
+✅ Result: Malware disables Windows Firewall for both domain and standard profiles via kernel driver
+
+
+▶  TOOL 3: WinDbg (Kernel Debugger)
+🔧 Steps to perform:
+•	Set up kernel debugging: attach WinDbg to the VM via serial/network
+•	In WinDbg: type: bu Lab10_01!DriverEntry → sets breakpoint on driver entry
+•	Run Lab10-01.exe → when driver loads, WinDbg breaks
+•	Type: !object \Driver → lists all loaded drivers including Lab10-01
+•	Type: dt _DRIVER_OBJECT [address] → shows DriverUnload function address
+•	Set bp on DriverUnload address: bu [address]
+•	Continue execution → when DriverUnload is called, step through in IDA side-by-side
+✅ Result: DriverUnload creates registry keys via RtlCreateRegistryKey/RtlWriteRegistryValue to disable firewall
+
+Lab10-02.exe — SSDT Hook to Hide Files
+▶  TOOL 1: IDA Pro + Cerbero Profiler
+🔧 Steps to perform:
+•	Open in Cerbero Profiler → see PE Resource contains MZ header (embedded driver)
+•	Open in IDA Pro → find string: C:\Windows\System32\Mlwx486.sys
+•	Trace code flow: extracts driver to that path → creates service "486 WS Driver" → StartServiceA
+•	Load Mlwx486.sys into IDA → find DriverEntry → code hooks NtQueryDirectoryFile
+•	See: MmGetSystemRoutineAddress called to find NtQueryDirectoryFile address
+•	See: loop through SSDT → overwrites NtQueryDirectoryFile address with evil hook
+•	Hook function: calls RtlCompareMemory on filename vs "Mlwx" → if match → hide file
+✅ Result: Malware installs a driver that hooks SSDT to hide files starting with "Mlwx"
+
+
+▶  TOOL 2: WinDbg
+🔧 Steps to perform:
+•	In WinDbg: kd> dps nt!KiServiceTable l 100 → shows SSDT BEFORE hook
+•	Run Lab10-02.exe in the VM
+•	In WinDbg: set bp: bu Mlwx486!DriverEntry
+•	Continue → break on driver entry → step through
+•	After execution: kd> dps nt!KiServiceTable l 100 → see hook applied
+•	NtQueryDirectoryFile now points to malicious hook function
+✅ Result: SSDT hook confirmed via WinDbg — NtQueryDirectoryFile redirected to hide Mlwx files

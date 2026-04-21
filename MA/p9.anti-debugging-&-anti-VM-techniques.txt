@@ -1,0 +1,91 @@
+Lab16-01.exe — Anti-Debugging Checks
+▶  TOOL: OllyDbg
+🔧 Steps to perform:
+•	Open Lab16-01.exe in OllyDbg
+•	Malware checks 3 anti-debug indicators:
+•	  1. BeingDebugged flag: reads PEB+2 → if 1, debugger present
+•	  2. Process Heap [10h]: heap flags differ under debugger
+•	  3. NtGlobalFlag: different value when debugger attached
+•	If any check succeeds → malware calls self-delete routine + terminates
+🔧 Bypass methods:
+•	Method 1: Install PhantOm plugin → automatically hides OllyDbg from all checks
+•	Method 2: In OllyDbg command bar → type: dump fs:[30]+2 → change byte to 0
+•	Method 3: Set breakpoints at each check → manually change the jump direction (F2 + edit)
+•	Method 4: Patch JNZ to JZ (hex 75 → 74) at each check address
+✅ Result: Three anti-debug checks; PhantOm plugin or manual byte patching bypasses them all
+
+
+Lab16-02.exe — TLS Callback + Password Verification
+▶  TOOL 1: IDA Pro
+🔧 Steps to perform:
+•	Open in IDA Pro → View → Segments → see .tls section (unusual — contains TLS callback)
+•	Press Ctrl+E → shows entry points list → TLS callback at 0x00401060
+•	TLS callback executes BEFORE main() → detects debugger using:
+•	  FindWindowA → looks for OllyDbg window title
+•	  OutputDebugString → detects debugger via timing
+•	strncmp for password comparison at 0x40123A → only compares first 4 characters
+▶  TOOL 2: OllyDbg
+🔧 Steps to perform:
+•	Load in OllyDbg → program terminates immediately (TLS callback kills it)
+•	NOP the anti-debug function at 0x00408033 (FindWindowA + OutputDebugString check)
+•	Find thread function sub_00401090 → it generates the password
+•	Inside: checks BeingDebugged flag → affects password generation
+•	Fix BeingDebugged flag → true password = byrrp@ss
+•	strncmp compares only first 4 characters → works with byrrp@ss
+✅ Result: TLS callback = anti-debug; real password = byrrp@ss (first 4 chars checked); .tls section is key
+
+
+Lab16-03.exe — Timing-Based Anti-Debug
+▶  TOOL: OllyDbg + IDA Pro
+🔧 Steps to perform:
+•	Run the malware → terminates immediately
+•	Open in OllyDbg → set bp at 0x401518 (strncmp) → run → check what name is compared
+•	Without debugger: filename should be peo.exe
+•	With debugger attached: filename = qgr.exe (timing difference changes behavior)
+•	In IDA: find QueryPerformanceCounter called twice with division by zero between them
+•	Division by zero takes longer under debugger (SEH invoked) → time difference > 1200 → peo becomes qgr
+•	Three timing-based techniques used:
+•	  1. QueryPerformanceCounter → determines correct filename
+•	  2. GetTickCount → crashes program if under debugger (null pointer)
+•	  3. rdtsc → self deletes if under debugger
+•	Bypass: in debugger → manually set var_118 = 1 → filename becomes peo.exe → rename file
+•	Domain used: adg.malwareanalysisbook.com
+✅ Result: Rename to peo.exe without debugger; bypass timing checks by setting var_118=1 in debugger
+
+
+Lab17-01.exe — Anti-VM (sidt/sldt/str Instructions)
+▶  TOOL: IDA Pro
+🔧 Steps to perform:
+•	Open in IDA Pro → search for: sidt, sldt, str instructions (Alt+T for each)
+•	Three anti-VM locations found:
+•	  0x401121 → sldt instruction
+•	  0x4011b5 → sidt instruction (stores IDTR)
+•	  0x401204 → str instruction
+•	sidt method: stores IDTR → reads 5th byte → compares to 0xFF (VMware signature)
+•	If match → calls sub_00401000 (self-delete routine)
+•	If commercial IDA Pro: run findAntiVM.py script → finds all 3 locations automatically
+🔧 Bypass methods:
+•	Method 1: NOP each anti-VM instruction
+•	Method 2: Patch the conditional jump after each check
+✅ Result: Three anti-VM checks using CPU instructions; sidt/IDTR used to detect VMware signature 0xFF
+
+
+Lab17-02.dll — Anti-VM via I/O Port Query
+▶  TOOL 1: rundll32 + Procmon
+🔧 Steps to perform:
+•	Run: rundll32.exe Lab17-02.dll,InstallRT
+•	Open Procmon → filter on Lab17-02.dll process
+•	Observe: DLL deletes itself → creates xinstall.log + vmselfdel.bat
+•	Open xinstall.log → message says VM detected → self-deleted
+▶  TOOL 2: IDA Pro
+🔧 Steps to perform:
+•	Open Lab17-02.dll in IDA → find the anti-VM check function
+•	Find: in instruction (opcode 0xED) → reads from I/O port
+•	EAX loaded with magic number 0x564D5868 (= VMXh in ASCII)
+•	ECX = 0xA (VMware version type query)
+•	This query only succeeds inside VMware → result reveals VMware presence
+🔧 Bypass methods:
+•	Method 1: NOP the in instruction
+•	Method 2: Patch all 3 jump conditions after the check
+•	Permanently: change string at offset 10019034 from [This is DVM]5 to [This is DVM]0
+✅ Result: Anti-VM via I/O port with VMXh magic number; NOP the in instruction to bypass

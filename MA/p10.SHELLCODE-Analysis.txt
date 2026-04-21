@@ -1,0 +1,82 @@
+Lab19-01.bin — Alphabetically Encoded Shellcode
+▶  TOOL 1: sctest (libemu)
+🔧 Steps to perform:
+•	Open terminal → navigate to folder containing Lab19-01.bin
+•	Run: sctest -Ss 99999 < Lab19-01.bin
+•	Output shows the shellcode emulation: functions called, network connections
+•	To get visual graph: run: sctest -Ss 99999 -G graph.dot < Lab19-01.bin
+•	Then: dot -Tpng graph.dot -o graph.png → open graph.png to see flow
+•	Functions imported by shellcode: LoadLibraryA, GetSystemDirectory, URLDownloadToFile, WinExec
+•	Encoding: alphabetical encoding (shellcode uses only alphabetic characters)
+•	C2 URL: http://www.practicalmalwareanalysis.com/shellcode/annoy_user.exe
+✅ Result: Shellcode is alphabetically encoded; downloads and runs annoy_user.exe from C2
+
+▶  TOOL 2: shellcode_launcher + OllyDbg
+🔧 Steps to perform:
+•	Run: shellcode_launcher.exe -i Lab19-01.bin
+•	Attach OllyDbg to the shellcode_launcher process
+•	In OllyDbg: step through to find the decoding function at start of shellcode
+•	Watch the decoding loop → observe bytes being decoded alphabetically
+•	After decode: set breakpoints on API calls (URLDownloadToFile, WinExec)
+✅ Result: shellcode_launcher runs raw .bin shellcode; OllyDbg lets you step through execution
+
+
+Lab19-02.exe — Shellcode Injection into iexplore.exe
+▶  TOOL 1: IDA Pro
+🔧 Steps to perform:
+•	Open Lab19-02.exe in IDA Pro
+•	Find: CreateProcess with iexplore.exe path → new browser process created
+•	Navigate to shellcode location: 0x407030 → press C to convert bytes to code
+•	See: call instruction (call trick) → shellcode uses this to get its own address
+•	From 0x407048: XOR loop with key 0xE7 → decodes the rest of shellcode
+•	Encoding: XOR with 0xE7
+✅ Result: Shellcode at 0x407030; XOR encoded with 0xE7; injected into iexplore.exe
+
+▶  TOOL 2: OllyDbg (Break in injected process)
+🔧 Steps to perform:
+•	Open Lab19-02.exe in OllyDbg → run until it creates iexplore.exe
+•	Step 1: Set breakpoint on WriteProcessMemory
+•	Step 2: When WriteProcessMemory bp hits: before memory is written → manually change first byte of shellcode (at 0x407030 in Lab19-02.exe) to 0xCC (INT3 = breakpoint)
+•	Step 3: Open SECOND OllyDbg instance → Attach → select the new IEXPLORE.exe
+•	Step 4: Resume Lab19-02.exe → WriteProcessMemory executes → shellcode written
+•	Step 5: IEXPLORE.exe hits the 0xCC breakpoint → breaks in second OllyDbg
+•	Now analyze shellcode live → set bp on connect function → check SockAddr struct
+•	sin_port = 0x3412 = 13330 (byte-swapped)
+•	sin_addr = 0xC0A8C802 = 192.168.200.2
+•	After connect: CreateProcessA for cmd.exe → reverse shell to 192.168.200.2:13330
+✅ Result: Shellcode = reverse shell sending cmd.exe to 192.168.200.2 port 13330
+
+Lab19-03.pdf — PDF Exploit + Shellcode
+▶  TOOL 1: pdfid
+🔧 Steps to perform:
+•	Open terminal on REMnux
+•	Run: pdfid Lab19-03.pdf
+•	Output shows counts for each PDF element type
+•	Look for: /JS and /JavaScript entries > 0 → JavaScript embedded in PDF
+✅ Result: PDF contains embedded JavaScript — likely exploit vehicle
+
+▶  TOOL 2: pdfextract
+🔧 Steps to perform:
+•	Run: pdfextract Lab19-03.pdf
+•	Extracted JavaScript file saved to current directory
+•	Open the extracted JavaScript → see:
+•	  1. PDF version check → filters target versions
+•	  2. Heap spray code → prepares memory for shellcode
+•	  3. Trigger: util.printf → this is the exploit function
+•	Exploit = CVE-2008-2992 (Adobe Reader util.printf buffer overflow)
+•	Shellcode encoding: Unicode %u encoding (e.g., %u9090%u9090...)
+✅ Result: Exploit: CVE-2008-2992 via util.printf; shellcode is Unicode %u encoded
+
+▶  TOOL 3: unicode2raw + shellcode_launcher
+🔧 Steps to perform:
+•	Convert shellcode: unicode2raw < shellcode_part.txt > Lab19-03_sc.bin
+•	Or use provided file: Lab19-03_sc.bin directly
+•	Run: shellcode_launcher.exe -i Lab19-03_sc.bin
+•	Attach OllyDbg → step through shellcode
+•	Shellcode imports: kernel32.dll functions via checksum-based lookup
+•	Then loads shell32.dll → finds ShellExecuteA
+•	Reads the PDF file → extracts two embedded files:
+•	  Temp\foo.exe (malicious executable)
+•	  Temp\bar.pdf (decoy PDF to show user)
+•	Executes foo.exe via CreateProcessA
+✅ Result: Shellcode extracts foo.exe + bar.pdf from PDF; drops in Temp folder; runs foo.exe
