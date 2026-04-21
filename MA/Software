@@ -1,0 +1,10 @@
+Practical 1	   Basic Static Analysis	VirusTotal, PEiD, PE Explorer, Strings
+Practical 2	     IDA Pro Static Analysis	IDA Pro, Imports/Xrefs, IDA Python
+Practical 3	     Persistence & Advanced Dynamic Analysis	OllyDbg, IDA Pro, ProcMon, Wireshark
+Practical 4      	Rootkits & Kernel Analysis	WinDbg, ProcMon, IDA Pro
+Practical 5	       Hooking & Credential Theft	IDA Pro, ProcMon, Regshot
+Practical 6	       Code Injection & Shellcode	IDA Pro, OllyDbg, Process Explorer
+Practical 7	     Encoding & Encryption	IDA Pro, KANAL, FindCrypt2, OllyDbg
+Practical 8    	Network Signatures & Covert Channels	IDA Pro, Wireshark, OllyDbg
+Practical 9	    Anti-Debugging Techniques	OllyDbg, IDA Pro, PhantOm Plugin
+Practical 10	    Shellcode, OOP Malware & Advanced Topics	IDA Pro, OllyDbg, sctest/libemu
